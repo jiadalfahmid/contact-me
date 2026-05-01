@@ -1,0 +1,1174 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Operation: False Alarm</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link
+      href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;700&display=swap"
+      rel="stylesheet"
+    />
+    <style>
+      *,
+      *::before,
+      *::after {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
+
+      :root {
+        --green: #00ff41;
+        --dgreen: #00b32c;
+        --red: #ff2222;
+        --cyan: #00e5ff;
+        --white: #e8f5e9;
+        --dwhite: #889988;
+        --amber: #ffb347;
+        --gold: #ffd700;
+        --warm: #ff8c42;
+        --bg: #000;
+        --glow-g: 0 0 8px var(--green), 0 0 20px rgba(0, 255, 65, 0.4);
+        --glow-c: 0 0 8px var(--cyan), 0 0 20px rgba(0, 229, 255, 0.4);
+        --glow-a: 0 0 8px var(--amber), 0 0 24px rgba(255, 179, 71, 0.5);
+        --glow-gold: 0 0 10px var(--gold), 0 0 30px rgba(255, 215, 0, 0.5);
+      }
+
+      html,
+      body {
+        width: 100%;
+        height: 100%;
+        background: var(--bg);
+        color: var(--green);
+        font-family: "JetBrains Mono", monospace;
+        overflow: hidden;
+        cursor: none;
+      }
+
+      /* ── CRT ── */
+      #crt-overlay {
+        position: fixed;
+        inset: 0;
+        z-index: 999;
+        pointer-events: none;
+        background: repeating-linear-gradient(
+          to bottom,
+          transparent 0px,
+          transparent 2px,
+          rgba(0, 0, 0, 0.18) 2px,
+          rgba(0, 0, 0, 0.18) 4px
+        );
+        mix-blend-mode: multiply;
+      }
+      #vignette {
+        position: fixed;
+        inset: 0;
+        z-index: 998;
+        pointer-events: none;
+        background: radial-gradient(
+          ellipse at center,
+          transparent 40%,
+          rgba(0, 0, 0, 0.95) 100%
+        );
+        transition: background 2s;
+      }
+      body.warm-mode #vignette {
+        background: radial-gradient(
+          ellipse at center,
+          transparent 40%,
+          rgba(10, 5, 0, 0.92) 100%
+        );
+      }
+
+      /* ── Canvas ── */
+      #matrix-canvas {
+        position: fixed;
+        inset: 0;
+        z-index: 0;
+        opacity: 0.2;
+        transition: opacity 1.2s;
+      }
+
+      /* ── Confetti canvas ── */
+      #confetti-canvas {
+        position: fixed;
+        inset: 0;
+        z-index: 8;
+        pointer-events: none;
+        opacity: 0;
+        transition: opacity 0.5s;
+      }
+      #confetti-canvas.show {
+        opacity: 1;
+      }
+
+      #red-flash {
+        position: fixed;
+        inset: 0;
+        z-index: 1;
+        background: rgba(255, 0, 0, 0.15);
+        pointer-events: none;
+        opacity: 0;
+        transition: opacity 0.2s;
+      }
+
+      /* ── Warm glow bloom (end state) ── */
+      #warm-bloom {
+        position: fixed;
+        inset: 0;
+        z-index: 2;
+        pointer-events: none;
+        background: radial-gradient(
+          ellipse at 50% 60%,
+          rgba(255, 140, 66, 0.06) 0%,
+          transparent 70%
+        );
+        opacity: 0;
+        transition: opacity 2s;
+      }
+      body.warm-mode #warm-bloom {
+        opacity: 1;
+      }
+
+      /* ── Flash ── */
+      #stop-flash {
+        position: fixed;
+        inset: 0;
+        z-index: 9000;
+        background: #ff0000;
+        color: #000;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        font-size: 15vw;
+        font-weight: 900;
+        letter-spacing: 2vw;
+        opacity: 0;
+        pointer-events: none;
+      }
+      body.flash-active #stop-flash {
+        opacity: 1;
+      }
+
+      /* ── Terminal ── */
+      #terminal {
+        position: fixed;
+        inset: 0;
+        z-index: 10;
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        align-items: flex-start;
+        padding: 8vh 8vw;
+        overflow: hidden;
+        max-width: 900px;
+        margin: 0 auto;
+      }
+      #log-container {
+        width: 100%;
+      }
+
+      .log-line {
+        display: block;
+        font-size: clamp(12px, 2vw, 15px);
+        line-height: 1.7;
+        opacity: 0;
+        white-space: pre-wrap;
+        word-break: break-all;
+        transition: color 0.3s;
+        margin-bottom: 4px;
+      }
+      .log-line.visible {
+        opacity: 1;
+      }
+
+      /* ── colour variants ── */
+      .log-line.dim-white {
+        color: var(--dwhite);
+        text-shadow: 0 0 5px rgba(255, 255, 255, 0.2);
+      }
+      .log-line.green {
+        color: var(--green);
+        text-shadow: var(--glow-g);
+      }
+      .log-line.warn {
+        color: #ffcc00;
+        text-shadow: 0 0 8px #ffcc00;
+      }
+      .log-line.danger {
+        color: var(--red);
+        font-weight: bold;
+        text-shadow:
+          0 0 8px var(--red),
+          0 0 20px rgba(255, 34, 34, 0.5);
+      }
+      .log-line.cyan {
+        color: var(--cyan);
+        text-shadow: var(--glow-c);
+      }
+      .log-line.calm-huge {
+        color: var(--cyan);
+        text-shadow: 0 0 15px var(--cyan);
+        font-weight: 700;
+        font-size: clamp(24px, 5vw, 42px);
+        letter-spacing: 6px;
+        text-align: center;
+        display: block;
+        margin-top: 20px;
+      }
+      .log-line.handoff {
+        color: var(--white);
+        font-style: italic;
+        text-shadow: 0 0 6px var(--white);
+      }
+      .log-line.personal {
+        color: #ff00ff;
+        text-shadow: 0 0 8px #ff00ff;
+        font-weight: bold;
+      }
+
+      /* ── WARM variants (end state) ── */
+      .log-line.amber {
+        color: var(--amber);
+        text-shadow: var(--glow-a);
+      }
+      .log-line.gold {
+        color: var(--gold);
+        text-shadow: var(--glow-gold);
+        font-weight: 700;
+      }
+      .log-line.warm-soft {
+        color: #ffddb3;
+        text-shadow: 0 0 10px rgba(255, 179, 71, 0.3);
+      }
+      .log-line.warm-dim {
+        color: rgba(255, 179, 71, 0.45);
+        font-style: italic;
+        font-size: clamp(10px, 1.8vw, 13px);
+      }
+      .log-line.big-warm {
+        color: var(--gold);
+        text-shadow: var(--glow-gold);
+        font-weight: 700;
+        font-size: clamp(20px, 4vw, 36px);
+        letter-spacing: 4px;
+        display: block;
+        margin-top: 10px;
+      }
+
+      .cursor {
+        display: inline-block;
+        width: 9px;
+        height: 1.1em;
+        background: currentColor;
+        vertical-align: text-bottom;
+        animation: blink 0.7s step-end infinite;
+      }
+      @keyframes blink {
+        50% {
+          opacity: 0;
+        }
+      }
+
+      /* ── Glitch ── */
+      #glitch-layer {
+        position: fixed;
+        inset: 0;
+        z-index: 11;
+        pointer-events: none;
+        display: none;
+        color: var(--red);
+        font-family: "JetBrains Mono", monospace;
+        font-size: clamp(12px, 2vw, 15px);
+        padding: 8vh 8vw;
+        max-width: 900px;
+        margin: 0 auto;
+        animation: glitch-clip 0.2s infinite linear;
+        opacity: 0.8;
+      }
+      @keyframes glitch-clip {
+        0% {
+          clip-path: inset(40% 0 58% 0);
+          transform: translate(-5px, 3px);
+        }
+        20% {
+          clip-path: inset(92% 0 1% 0);
+          transform: translate(5px, -3px);
+        }
+        40% {
+          clip-path: inset(43% 0 1% 0);
+          transform: translate(-3px, 3px);
+        }
+        60% {
+          clip-path: inset(25% 0 58% 0);
+          transform: translate(4px, 0);
+        }
+        80% {
+          clip-path: inset(54% 0 7% 0);
+          transform: translate(-5px, -3px);
+        }
+        100% {
+          clip-path: inset(58% 0 43% 0);
+          transform: translate(0, 0);
+        }
+      }
+      body.phase-peak #glitch-layer {
+        display: block;
+      }
+      body.phase-peak {
+        background: #110000;
+      }
+
+      /* ── Shake ── */
+      body.phase-shake {
+        animation: shake 0.5s infinite cubic-bezier(0.36, 0.07, 0.19, 0.97);
+      }
+      @keyframes shake {
+        10%,
+        90% {
+          transform: translate3d(-1px, 1px, 0);
+        }
+        20%,
+        80% {
+          transform: translate3d(2px, -1px, 0);
+        }
+        30%,
+        50%,
+        70% {
+          transform: translate3d(-3px, 2px, 0);
+        }
+        40%,
+        60% {
+          transform: translate3d(3px, -2px, 0);
+        }
+      }
+
+      /* ── Gate Layer ── */
+      #gate-overlay {
+        position: fixed;
+        inset: 0;
+        z-index: 500;
+        background: #030303;
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        align-items: center;
+        gap: 30px;
+        transition: opacity 0.3s;
+      }
+      .gate-text-container {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+        text-align: center;
+      }
+      .gate-text {
+        font-size: clamp(12px, 2.5vw, 16px);
+        color: rgba(255, 255, 255, 0.4);
+        letter-spacing: 2px;
+        font-weight: 300;
+        opacity: 0;
+        animation: fade-pulse 4s infinite alternate;
+      }
+      .gate-text:nth-child(2) {
+        animation-delay: 1.3s;
+      }
+      .gate-text:nth-child(3) {
+        animation-delay: 2.6s;
+        color: rgba(255, 255, 255, 0.7);
+      }
+      @keyframes fade-pulse {
+        0%,
+        20% {
+          opacity: 0.2;
+        }
+        80%,
+        100% {
+          opacity: 0.8;
+        }
+      }
+
+      .action-btn {
+        border: 1px solid rgba(255, 255, 255, 0.2);
+        color: rgba(255, 255, 255, 0.6);
+        background: transparent;
+        font-family: "JetBrains Mono", monospace;
+        font-size: clamp(12px, 2vw, 14px);
+        padding: 14px 36px;
+        letter-spacing: 3px;
+        cursor: none;
+        transition: all 0.3s;
+        outline: none;
+        margin-top: 10px;
+      }
+      .action-btn:hover {
+        background: rgba(255, 255, 255, 0.05);
+        border-color: rgba(255, 255, 255, 0.8);
+        color: #fff;
+        box-shadow: 0 0 20px rgba(255, 255, 255, 0.1);
+      }
+      .action-btn.danger-btn:hover {
+        border-color: var(--red);
+        color: var(--red);
+        box-shadow: 0 0 20px rgba(255, 34, 34, 0.3);
+      }
+      .action-btn.warm-btn {
+        border-color: rgba(255, 179, 71, 0.4);
+        color: rgba(255, 179, 71, 0.7);
+      }
+      .action-btn.warm-btn:hover {
+        border-color: var(--amber);
+        color: var(--amber);
+        box-shadow: 0 0 20px rgba(255, 179, 71, 0.35);
+      }
+      #gate-overlay small {
+        color: rgba(255, 255, 255, 0.2);
+        font-size: 10px;
+        letter-spacing: 2px;
+      }
+
+      /* ── Return Layer ── */
+      #return-actions {
+        display: none;
+        margin-top: 30px;
+        gap: 20px;
+        flex-wrap: wrap;
+      }
+      #return-actions.show {
+        display: flex;
+      }
+
+      /* ── End Card (fun friendly) ── */
+      #end-card {
+        display: none;
+        margin-top: 36px;
+        flex-direction: column;
+        gap: 0;
+        animation: card-rise 0.7s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+        opacity: 0;
+        transform: translateY(16px);
+      }
+      #end-card.show {
+        display: flex;
+      }
+      @keyframes card-rise {
+        to {
+          opacity: 1;
+          transform: translateY(0);
+        }
+      }
+
+      /* big warm heading inside card */
+      #end-card .end-headline {
+        font-size: clamp(13px, 2.5vw, 17px);
+        color: var(--amber);
+        letter-spacing: 1px;
+        margin-bottom: 6px;
+        text-shadow: var(--glow-a);
+      }
+
+      #wa-btn {
+        display: inline-flex;
+        align-items: center;
+        gap: 14px;
+        border: 1px solid var(--amber);
+        color: #000;
+        background: linear-gradient(135deg, var(--amber) 0%, var(--gold) 100%);
+        font-family: "JetBrains Mono", monospace;
+        font-size: clamp(12px, 2vw, 14px);
+        font-weight: 700;
+        padding: 16px 32px;
+        cursor: none;
+        letter-spacing: 2px;
+        text-decoration: none;
+        transition: all 0.3s;
+        box-shadow:
+          0 0 20px rgba(255, 179, 71, 0.35),
+          0 4px 24px rgba(255, 179, 71, 0.2);
+        margin-top: 20px;
+        margin-bottom: 12px;
+        animation: pulse-warm 2s ease-in-out infinite;
+      }
+      @keyframes pulse-warm {
+        0%,
+        100% {
+          box-shadow:
+            0 0 20px rgba(255, 179, 71, 0.35),
+            0 4px 24px rgba(255, 179, 71, 0.2);
+        }
+        50% {
+          box-shadow:
+            0 0 40px rgba(255, 215, 0, 0.55),
+            0 4px 32px rgba(255, 179, 71, 0.4);
+        }
+      }
+      #wa-btn:hover {
+        transform: translateY(-3px) scale(1.02);
+        box-shadow:
+          0 0 50px rgba(255, 215, 0, 0.6),
+          0 8px 32px rgba(255, 179, 71, 0.5);
+      }
+      #wa-btn svg {
+        flex-shrink: 0;
+      }
+
+      /* score badge */
+      #score-badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 10px;
+        border: 1px solid rgba(255, 215, 0, 0.25);
+        background: rgba(255, 215, 0, 0.05);
+        color: rgba(255, 215, 0, 0.7);
+        font-size: 11px;
+        letter-spacing: 2px;
+        padding: 8px 16px;
+        margin-bottom: 4px;
+        width: fit-content;
+      }
+
+      /* progress */
+      #progress-bar {
+        width: 100%;
+        max-width: 420px;
+        height: 2px;
+        background: rgba(255, 179, 71, 0.15);
+        margin-top: 4px;
+      }
+      #progress-fill {
+        height: 100%;
+        background: linear-gradient(to right, var(--amber), var(--gold));
+        width: 0%;
+        box-shadow: 0 0 8px var(--amber);
+      }
+      #countdown-text {
+        font-size: 11px;
+        color: rgba(255, 179, 71, 0.45);
+        letter-spacing: 2px;
+        margin-top: 8px;
+      }
+
+      /* ── Fake Cursor ── */
+      #fake-cursor {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 6px;
+        height: 6px;
+        background: rgba(255, 255, 255, 0.8);
+        border-radius: 50%;
+        pointer-events: none;
+        z-index: 9999;
+        transform: translate(calc(var(--x) - 3px), calc(var(--y) - 3px));
+        transition:
+          transform 0.08s cubic-bezier(0.2, 0.8, 0.2, 1),
+          background 0.5s;
+        box-shadow: 0 0 8px 1px rgba(255, 255, 255, 0.5);
+      }
+      body.phase-peak #fake-cursor {
+        background: var(--red);
+        box-shadow: 0 0 12px var(--red);
+      }
+      body.phase-calm #fake-cursor {
+        background: var(--cyan);
+        box-shadow: 0 0 12px var(--cyan);
+      }
+      body.warm-mode #fake-cursor {
+        background: var(--amber);
+        box-shadow: 0 0 14px var(--amber);
+      }
+      body.flash-active #fake-cursor {
+        display: none;
+      }
+
+      @media (max-width: 600px) {
+        #terminal {
+          padding: 10vh 5vw;
+        }
+        #wa-btn {
+          padding: 14px 20px;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div id="fake-cursor"></div>
+    <div id="crt-overlay"></div>
+    <div id="vignette"></div>
+    <div id="warm-bloom"></div>
+    <div id="red-flash"></div>
+    <canvas id="matrix-canvas"></canvas>
+    <canvas id="confetti-canvas"></canvas>
+    <div id="stop-flash">STOP</div>
+    <div id="glitch-layer"></div>
+
+    <div id="terminal">
+      <div id="log-container"></div>
+
+      <!-- Returning user buttons -->
+      <div id="return-actions">
+        <button class="action-btn danger-btn" id="btn-rerun">
+          [ RE-RUN SIMULATION ]
+        </button>
+        <button class="action-btn warm-btn" id="btn-connect">
+          [ CONNECT DIRECTLY ]
+        </button>
+      </div>
+
+      <!-- ── End Card ── -->
+      <div id="end-card">
+        <div id="score-badge">
+          <span>★</span>
+          <span>SURVIVOR SCORE: <span id="score-val">—</span></span>
+          <span>★</span>
+        </div>
+        <a id="wa-btn" href="#" target="_blank">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor">
+            <path
+              d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347z"
+            />
+            <path
+              d="M12 0C5.373 0 0 5.373 0 12c0 2.125.558 4.112 1.528 5.836L0 24l6.335-1.652C8.021 23.447 9.969 24 12 24c6.627 0 12-5.373 12-12S18.627 0 12 0zm0 22c-1.885 0-3.637-.49-5.156-1.344l-.37-.22-3.814.995 1.02-3.726-.241-.382A9.938 9.938 0 0 1 2 12C2 6.477 6.477 2 12 2s10 4.477 10 10-4.477 10-10 10z"
+            />
+          </svg>
+          SAY HI ON WHATSAPP →
+        </a>
+        <div id="progress-bar"><div id="progress-fill"></div></div>
+        <span id="countdown-text"
+          >opening in <span id="countdown">7</span>s... (you earned it)</span
+        >
+      </div>
+    </div>
+
+    <!-- Gate -->
+    <div id="gate-overlay">
+      <div class="gate-text-container">
+        <div class="gate-text">this environment is not indexed.</div>
+        <div class="gate-text">unauthorized users are not expected.</div>
+        <div class="gate-text">are you sure you want to proceed?</div>
+      </div>
+      <button class="action-btn" id="gate-btn">[ PROCEED ANYWAY ]</button>
+      <small>no real data will be accessed.</small>
+    </div>
+
+    <script>
+      // ─── Utils ───────────────────────────────────────────────
+      const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+      const rand = (a, b) => a + Math.random() * (b - a);
+      const randI = (a, b) => Math.floor(rand(a, b + 1));
+      const logContainer = document.getElementById("log-container");
+      const glitchLayer = document.getElementById("glitch-layer");
+
+      const WA_LINK =
+        "https://wa.me/8801791064618?text=" +
+        encodeURIComponent(
+          "I just survived your False Alarm interface\nThat was wild.\n\nLet's talk.",
+        );
+
+      document.getElementById("wa-btn").href = WA_LINK;
+
+      // Cursor
+      document.addEventListener("mousemove", (e) => {
+        document.documentElement.style.setProperty("--x", e.clientX + "px");
+        document.documentElement.style.setProperty("--y", e.clientY + "px");
+      });
+
+      // Client meta
+      const ua = navigator.userAgent;
+      const BR = ua.includes("Firefox")
+        ? "FIREFOX"
+        : ua.includes("Chrome")
+          ? "CHROME"
+          : ua.includes("Safari")
+            ? "SAFARI"
+            : ua.includes("Edge")
+              ? "EDGE"
+              : "UNKNOWN";
+      const OS = ua.includes("Win")
+        ? "WIN"
+        : ua.includes("Mac")
+          ? "MAC"
+          : ua.includes("Linux")
+            ? "LINX"
+            : ua.includes("Android")
+              ? "DROID"
+              : ua.includes("iPhone") || ua.includes("iPad")
+                ? "IOS"
+                : "SYS";
+      const VP = `${window.innerWidth}x${window.innerHeight}`;
+
+      // ─── Audio ───────────────────────────────────────────────
+      const AudioSys = {
+        ctx: null,
+        init() {
+          if (!this.ctx)
+            this.ctx = new (window.AudioContext || window.webkitAudioContext)();
+          if (this.ctx.state === "suspended") this.ctx.resume();
+        },
+        play(type) {
+          if (!this.ctx) return;
+          const o = this.ctx.createOscillator(),
+            g = this.ctx.createGain();
+          o.connect(g);
+          g.connect(this.ctx.destination);
+          const t = this.ctx.currentTime;
+          if (type === "type") {
+            o.type = "triangle";
+            o.frequency.setValueAtTime(800 + Math.random() * 400, t);
+            g.gain.setValueAtTime(0.015, t);
+            g.gain.exponentialRampToValueAtTime(0.001, t + 0.04);
+            o.start(t);
+            o.stop(t + 0.04);
+          } else if (type === "shock") {
+            o.type = "square";
+            o.frequency.setValueAtTime(100, t);
+            o.frequency.exponentialRampToValueAtTime(20, t + 0.5);
+            g.gain.setValueAtTime(0.2, t);
+            g.gain.exponentialRampToValueAtTime(0.01, t + 0.5);
+            o.start(t);
+            o.stop(t + 0.5);
+          } else if (type === "glitch") {
+            o.type = "sawtooth";
+            o.frequency.setValueAtTime(150, t);
+            o.frequency.linearRampToValueAtTime(300, t + 0.2);
+            g.gain.setValueAtTime(0.1, t);
+            g.gain.linearRampToValueAtTime(0.01, t + 0.2);
+            o.start(t);
+            o.stop(t + 0.2);
+          } else if (type === "calm") {
+            o.type = "sine";
+            o.frequency.setValueAtTime(220, t);
+            o.frequency.linearRampToValueAtTime(110, t + 3);
+            g.gain.setValueAtTime(0, t);
+            g.gain.linearRampToValueAtTime(0.15, t + 1);
+            g.gain.linearRampToValueAtTime(0, t + 4);
+            o.start(t);
+            o.stop(t + 4);
+          } else if (type === "flash") {
+            o.type = "square";
+            o.frequency.setValueAtTime(40, t);
+            g.gain.setValueAtTime(0.3, t);
+            g.gain.exponentialRampToValueAtTime(0.01, t + 0.3);
+            o.start(t);
+            o.stop(t + 0.3);
+          } else if (type === "win") {
+            // ★ Friendly win jingle — three quick ascending tones
+            [
+              [523, 0],
+              [659, 0.18],
+              [784, 0.36],
+              [1047, 0.54],
+            ].forEach(([freq, delay]) => {
+              const ow = this.ctx.createOscillator(),
+                gw = this.ctx.createGain();
+              ow.connect(gw);
+              gw.connect(this.ctx.destination);
+              ow.type = "sine";
+              ow.frequency.setValueAtTime(freq, t + delay);
+              gw.gain.setValueAtTime(0, t + delay);
+              gw.gain.linearRampToValueAtTime(0.18, t + delay + 0.05);
+              gw.gain.linearRampToValueAtTime(0, t + delay + 0.25);
+              ow.start(t + delay);
+              ow.stop(t + delay + 0.3);
+            });
+          }
+        },
+      };
+
+      // ─── Typewriter ──────────────────────────────────────────
+      async function typeLine(text, cls = "dim-white", spd = 1) {
+        const el = document.createElement("span");
+        el.className = `log-line ${cls}`;
+        logContainer.appendChild(el);
+        await sleep(10);
+        el.classList.add("visible");
+        for (const ch of text) {
+          el.textContent += ch;
+          if (ch !== " ") AudioSys.play("type");
+          await sleep((Math.random() * 35 + 15) * spd);
+        }
+        while (logContainer.children.length > 26)
+          logContainer.removeChild(logContainer.firstChild);
+        glitchLayer.innerHTML = logContainer.innerHTML;
+        return el;
+      }
+
+      function instantLine(text, cls = "dim-white") {
+        const el = document.createElement("span");
+        el.className = `log-line ${cls} visible`;
+        el.textContent = text;
+        logContainer.appendChild(el);
+        while (logContainer.children.length > 26)
+          logContainer.removeChild(logContainer.firstChild);
+        return el;
+      }
+
+      // ─── Matrix Canvas ───────────────────────────────────────
+      const canvas = document.getElementById("matrix-canvas");
+      const ctx = canvas.getContext("2d");
+      let drops = [],
+        matrixColor = "#334433";
+
+      function initMatrix() {
+        canvas.width = innerWidth;
+        canvas.height = innerHeight;
+        drops = Array.from(
+          { length: Math.floor(canvas.width / 14) },
+          () => Math.random() * -100,
+        );
+      }
+      function drawMatrix() {
+        ctx.fillStyle = "rgba(0,0,0,0.08)";
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.fillStyle = matrixColor;
+        ctx.font = "14px JetBrains Mono";
+        drops.forEach((y, i) => {
+          ctx.fillText(String.fromCharCode(randI(33, 126)), i * 14, y * 14);
+          if (y * 14 > canvas.height && Math.random() > 0.97) drops[i] = 0;
+          drops[i] += 1;
+        });
+      }
+      initMatrix();
+      addEventListener("resize", initMatrix);
+      setInterval(drawMatrix, 40);
+
+      // ─── Confetti Canvas ─────────────────────────────────────
+      const cc = document.getElementById("confetti-canvas");
+      const cctx = cc.getContext("2d");
+      let particles = [];
+
+      function initConfettiCanvas() {
+        cc.width = innerWidth;
+        cc.height = innerHeight;
+      }
+      initConfettiCanvas();
+      addEventListener("resize", initConfettiCanvas);
+
+      const CONFETTI_COLORS = [
+        "#ffb347",
+        "#ffd700",
+        "#00e5ff",
+        "#ff8c42",
+        "#ffffff",
+        "#00ff41",
+      ];
+      function spawnConfetti(n = 80) {
+        for (let i = 0; i < n; i++) {
+          particles.push({
+            x: rand(0, innerWidth),
+            y: rand(-20, -80),
+            vx: rand(-2.5, 2.5),
+            vy: rand(2, 5.5),
+            size: rand(5, 11),
+            color: CONFETTI_COLORS[randI(0, CONFETTI_COLORS.length - 1)],
+            rot: rand(0, Math.PI * 2),
+            rotV: rand(-0.08, 0.08),
+            life: 1,
+            decay: rand(0.008, 0.016),
+            shape: Math.random() > 0.5 ? "rect" : "circle",
+          });
+        }
+      }
+      function drawConfetti() {
+        cctx.clearRect(0, 0, cc.width, cc.height);
+        particles = particles.filter((p) => p.life > 0);
+        particles.forEach((p) => {
+          p.x += p.vx;
+          p.y += p.vy;
+          p.vy += 0.08; // gravity
+          p.rot += p.rotV;
+          p.life -= p.decay;
+          cctx.save();
+          cctx.globalAlpha = Math.max(0, p.life);
+          cctx.translate(p.x, p.y);
+          cctx.rotate(p.rot);
+          cctx.fillStyle = p.color;
+          if (p.shape === "rect")
+            cctx.fillRect(-p.size / 2, -p.size / 4, p.size, p.size / 2);
+          else {
+            cctx.beginPath();
+            cctx.arc(0, 0, p.size / 2, 0, Math.PI * 2);
+            cctx.fill();
+          }
+          cctx.restore();
+        });
+      }
+      setInterval(drawConfetti, 30);
+
+      let confettiInterval = null;
+      function startConfetti(duration = 4000) {
+        cc.classList.add("show");
+        spawnConfetti(90);
+        confettiInterval = setInterval(() => spawnConfetti(25), 600);
+        setTimeout(() => {
+          clearInterval(confettiInterval);
+        }, duration);
+      }
+
+      // ─── SCORE calculation ───────────────────────────────────
+      let phaseStartTime;
+      function calcScore() {
+        const elapsed = (Date.now() - phaseStartTime) / 1000;
+        // faster survivors score higher (max ~1000, min ~600)
+        return Math.min(1000, Math.max(600, Math.round(1000 - elapsed * 3)));
+      }
+
+      // ════════════════════════════════════════════════════════
+      // PHASES 1–4 (unchanged — the user loves these)
+      // ════════════════════════════════════════════════════════
+
+      async function runPhase1() {
+        AudioSys.play("shock");
+        matrixColor = "#00ff41";
+        canvas.style.opacity = "0.3";
+        await typeLine("> trigger received.", "dim-white", 0.6);
+        await sleep(800);
+        await typeLine("> wait...", "dim-white", 1.5);
+        await sleep(800);
+        await typeLine("> wait...", "dim-white", 1.5);
+        await sleep(800);
+        AudioSys.play("glitch");
+        await typeLine("> what did you just do?", "warn", 1.8);
+        await sleep(800);
+        await typeLine("> unauthorized execution confirmed", "danger", 0.4);
+        await typeLine("> initiating trace...", "danger", 0.4);
+      }
+
+      async function runPhase2() {
+        matrixColor = "#00e5ff";
+        document.body.classList.add("phase-shake");
+        await sleep(400);
+        await typeLine("> locking session...", "cyan", 0.4);
+        await typeLine("> extracting environment data...", "cyan", 0.4);
+        await typeLine("> scanning client signature...", "cyan", 0.4);
+        await typeLine("> anomaly score: 92.4%", "danger", 0.4);
+        await sleep(600);
+        await typeLine(`> resolving node: DHAKA-SECTOR`, "personal", 0.2);
+        await typeLine(`> client: ${BR}-${OS}`, "personal", 0.2);
+        await typeLine(`> viewport: ${VP}`, "personal", 0.2);
+        await typeLine(`> latency: ${randI(10, 29)}ms`, "personal", 0.2);
+        await sleep(800);
+        await typeLine("> confidence level: 87.3%", "danger", 0.4);
+        await typeLine("> this started with your input", "warn", 0.8);
+        await sleep(600);
+        document.body.classList.remove("phase-shake");
+        matrixColor = "#ff2222";
+        await typeLine("> this doesn't look accidental", "warn", 1.5);
+        await sleep(500);
+        await typeLine("> are you trying to access something?", "warn", 1.5);
+        await sleep(600);
+      }
+
+      async function runPhase3() {
+        document.body.classList.add("phase-peak", "phase-shake");
+        document.getElementById("red-flash").style.opacity = "1";
+        AudioSys.play("glitch");
+        await typeLine("> escalation protocol active", "danger", 0.4);
+        await typeLine("> breach classification: unknown", "danger", 0.4);
+        await typeLine("> flagging session...", "danger", 0.4);
+        await sleep(400);
+        AudioSys.play("shock");
+        const flagged = await typeLine("> FLAGGED", "danger", 0.2);
+        flagged.style.fontSize = "2em";
+        flagged.style.letterSpacing = "5px";
+        await sleep(1000);
+        AudioSys.play("flash");
+        document.body.classList.add("flash-active");
+        await sleep(350);
+        document.body.classList.remove("flash-active");
+      }
+
+      async function runPhase4() {
+        document.body.classList.remove("phase-peak", "phase-shake");
+        document.getElementById("red-flash").style.opacity = "0";
+        matrixColor = "#000000";
+        logContainer.innerHTML = "";
+        glitchLayer.innerHTML = "";
+        await sleep(1000);
+        await typeLine("...", "dim-white", 4);
+        await sleep(1500);
+        AudioSys.play("calm");
+        document.body.classList.add("phase-calm");
+        await typeLine("relax.", "calm-huge", 2);
+        await sleep(3000);
+      }
+
+      // ════════════════════════════════════════════════════════
+      // PHASES 5–8 — FUN & FRIENDLY ENDING ★
+      // ════════════════════════════════════════════════════════
+
+      async function runPhase5() {
+        // Warm palette switch
+        document.body.classList.remove("phase-calm");
+        document.body.classList.add("warm-mode");
+        matrixColor = "#3a1f00";
+        canvas.style.opacity = "0.18";
+        logContainer.innerHTML = "";
+
+        await sleep(600);
+        await typeLine("> okay, okay. show's over.", "amber", 1.3);
+        await sleep(700);
+        await typeLine("> nothing was tracked.", "warm-soft", 1.2);
+        await typeLine("> nothing was accessed.", "warm-soft", 1.2);
+        await typeLine("> no real data. i promise.", "warm-soft", 1.4);
+        await sleep(800);
+        await typeLine("> you didn't break anything  :)", "amber", 1.8);
+        await sleep(1000);
+      }
+
+      async function runPhase6() {
+        await typeLine(
+          "> what you experienced was 100% made up.",
+          "warm-soft",
+          1.1,
+        );
+        await sleep(400);
+        await typeLine(
+          "> every log. every trace. every threat.",
+          "warm-dim",
+          1.0,
+        );
+        await typeLine("> all fiction. all vibes.", "warm-dim", 1.0);
+        await sleep(600);
+        await typeLine("> but you stayed through all of it —", "amber", 1.3);
+        await sleep(500);
+
+        // Score reveal
+        const score = calcScore();
+        document.getElementById("score-val").textContent =
+          score.toLocaleString();
+        const scoreEl = await typeLine(
+          `> survivor score: ${score.toLocaleString()} pts  ★`,
+          "gold",
+          1.5,
+        );
+        scoreEl.style.fontWeight = "700";
+        AudioSys.play("win");
+        startConfetti(5000);
+        await sleep(1200);
+      }
+
+      async function runPhase7() {
+        await typeLine(
+          "> that means you're the kind of person",
+          "warm-soft",
+          1.0,
+        );
+        await sleep(300);
+        await typeLine(
+          "> who doesn't close tabs when it gets weird.",
+          "amber",
+          1.2,
+        );
+        await sleep(600);
+        await typeLine(
+          "> honestly? that's exactly who i want to talk to.",
+          "gold",
+          1.3,
+        );
+        await sleep(1000);
+        await typeLine(
+          "> no more terminals. no more fake alerts.",
+          "warm-dim",
+          1.0,
+        );
+        await sleep(300);
+        await typeLine("> just a real conversation.", "amber", 1.5);
+        await sleep(800);
+      }
+
+      async function runPhase8() {
+        await typeLine(
+          "> hit the button. let's actually talk.  👇",
+          "gold",
+          1.4,
+        );
+        await sleep(400);
+
+        const card = document.getElementById("end-card");
+        card.classList.add("show");
+
+        // Progress bar + countdown → auto open WA
+        const fill = document.getElementById("progress-fill");
+        const cdEl = document.getElementById("countdown");
+        let timeLeft = 7;
+        const timer = setInterval(() => {
+          timeLeft -= 0.05;
+          fill.style.width = `${((7 - timeLeft) / 7) * 100}%`;
+          cdEl.textContent = Math.ceil(Math.max(0, timeLeft));
+          if (timeLeft <= 0) {
+            clearInterval(timer);
+            window.open(WA_LINK, "_blank");
+          }
+        }, 50);
+      }
+
+      // ════════════════════════════════════════════════════════
+      // FULL SEQUENCE
+      // ════════════════════════════════════════════════════════
+      async function runFullSequence() {
+        phaseStartTime = Date.now();
+        await runPhase1();
+        await runPhase2();
+        await runPhase3();
+        await runPhase4();
+        await runPhase5();
+        await runPhase6();
+        await runPhase7();
+        await runPhase8();
+      }
+
+      // ─── Return Logic ────────────────────────────────────────
+      async function runReturnLogic() {
+        document.body.classList.add("warm-mode");
+        matrixColor = "#3a1f00";
+        canvas.style.opacity = "0.18";
+        AudioSys.play("calm");
+
+        await typeLine("> oh hey, you're back.", "amber", 1.0);
+        await sleep(500);
+        await typeLine("> i'll take that as a compliment  :)", "gold", 1.2);
+        await sleep(600);
+
+        document.getElementById("return-actions").classList.add("show");
+      }
+
+      // ─── Gate ────────────────────────────────────────────────
+      document
+        .getElementById("gate-btn")
+        .addEventListener("click", async () => {
+          AudioSys.init();
+          const ov = document.getElementById("gate-overlay");
+          ov.style.opacity = "0";
+          await sleep(300);
+          ov.style.display = "none";
+
+          const visited = localStorage.getItem("ofa_v5_visit");
+          localStorage.setItem("ofa_v5_visit", "true");
+
+          if (visited) {
+            await runReturnLogic();
+          } else {
+            await runFullSequence();
+          }
+        });
+
+      // ─── Return Buttons ──────────────────────────────────────
+      document
+        .getElementById("btn-rerun")
+        .addEventListener("click", async () => {
+          document.getElementById("return-actions").classList.remove("show");
+          logContainer.innerHTML = "";
+          document.body.classList.remove("warm-mode");
+          cc.classList.remove("show");
+          particles = [];
+          await runFullSequence();
+        });
+
+      document.getElementById("btn-connect").addEventListener("click", () => {
+        window.open(WA_LINK, "_blank");
+      });
+    </script>
+  </body>
+</html>
